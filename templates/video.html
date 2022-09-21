@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div>
+    <h1>Load video</h1>
+    <form method="post" class="container-fluid form-control">
+        {% csrf_token %}
+        <label>
+            Video url
+            <input style="width: 500px" name="url" required class="input-group-lg">
+        </label>
+        <button class="btn input-group-lg btn-success" type="submit">Load</button>
+    </form>
+</div>
+{% endblock %}
