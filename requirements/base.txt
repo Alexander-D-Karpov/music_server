@@ -9,3 +9,4 @@ ytmusicapi==0.22.0
 pydub
 Pillow
 redis
+python-mpd2

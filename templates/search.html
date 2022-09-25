@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
 <div>
-    <h1>Load url(youtube)</h1>
+    <h1>Load channel</h1>
     <form method="post" class="container-fluid form-control">
         {% csrf_token %}
         <label>
-            Url
-            <input style="width: 500px" name="url" required class="input-group-lg">
+            Name
+            <input style="width: 500px" name="name" required class="input-group-lg">
         </label>
         <button class="btn input-group-lg btn-success" type="submit">Load</button>
     </form>
