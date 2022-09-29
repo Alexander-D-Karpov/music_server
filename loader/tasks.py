@@ -2,12 +2,14 @@ from celery import shared_task
 from pytube import Channel, Playlist
 
 from loader.services.file import load_dir
-from loader.services.yt import download_from_youtube_link
+from loader.services import yandex, yt
 
 
 @shared_task
 def list_tracks(url):
-    if "channel" in url or "/c/" in url:
+    if "yandex" in url:
+        yandex.load_playlist(url)
+    elif "channel" in url or "/c/" in url:
         p = Channel(url)
         for video in p.video_urls:
             process_yb.apply_async(kwargs={"url": video})
@@ -24,7 +26,7 @@ def list_tracks(url):
 
 @shared_task(max_retries=5)
 def process_yb(url):
-    download_from_youtube_link(url)
+    yt.download_from_youtube_link(url)
     return url
 
 
@@ -32,3 +34,8 @@ def process_yb(url):
 def process_dir(path):
     load_dir(path)
     return path
+
+
+@shared_task
+def load_ym_file_meta(track):
+    return yandex.load_file_meta(track)

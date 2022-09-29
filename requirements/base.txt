@@ -10,3 +10,5 @@ pydub
 Pillow
 redis
 python-mpd2
+spotipy
+yandex_music

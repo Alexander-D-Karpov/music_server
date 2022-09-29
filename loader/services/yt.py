@@ -5,7 +5,7 @@ import requests
 from PIL import Image
 from django.conf import settings
 from django.core.files import File
-from mutagen.id3 import ID3, APIC, TORY, TOPE
+from mutagen.id3 import ID3, APIC, TORY, TOPE, TCON
 from mutagen.mp3 import MP3
 
 from loader.models import Song, Author, Album
@@ -13,7 +13,7 @@ from pytube import YouTube, Search
 from mutagen.easyid3 import EasyID3
 from pydub import AudioSegment
 
-from loader.services.yt_music import search
+from loader.services.spotify import get_track_info
 from random import randint
 
 
@@ -26,22 +26,12 @@ def download_from_youtube_link(link: str) -> Song:
     if not len(yt.streams):
         raise ValueError("There is no such song")
 
-    s = search(yt.title, "albums")
-    if s:
-        album = s[0]
-    else:
-        album = None
-    thumbnail = None
-    if album:
-        albm = Album.objects.get_or_create(name=album["title"])[0]
-        if "thumbnails" in album:
-            thumbnail = album["thumbnails"][-1]["url"]
-    else:
-        albm = None
-    name = yt.title
-    author = Author.objects.get_or_create(name=yt.author)[0]
-    if Song.objects.filter(name=name, author=author, album=albm).exists():
-        return Song.objects.get(name=name, author=author, album=albm)
+    info = get_track_info(yt.title)
+    if sng := Song.objects.filter(name=info["title"], album__name=info["album_name"]):
+        return sng.first()
+
+    authors = [Author.objects.get_or_create(name=x)[0] for x in info["artists"]]
+    album = Album.objects.get_or_create(name=info["album_name"])[0]
 
     audio = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
     orig_path = audio.download(output_path=settings.MEDIA_ROOT)
@@ -51,19 +41,11 @@ def download_from_youtube_link(link: str) -> Song:
     AudioSegment.from_file(orig_path).export(path)
     os.remove(orig_path)
 
-    if not thumbnail:
-        thumbnail = yt.thumbnail_url
-
-    meta = search(name, "songs")
-
-    author_m = None
-    if meta:
-        name = meta[0]["title"]
-        author_m = [x["name"] for x in meta[0]["artists"]]
-
-    r = requests.get(thumbnail)
+    # load album image
+    r = requests.get(info["album_image"])
     img_pth = str(
-        settings.MEDIA_ROOT + f"/{thumbnail.split('/')[-1]}_{str(randint(100, 999))}"
+        settings.MEDIA_ROOT
+        + f"/{info['album_image'].split('/')[-1]}_{str(randint(100, 999))}"
     )
     with open(img_pth, "wb") as f:
         f.write(r.content)
@@ -73,6 +55,7 @@ def download_from_youtube_link(link: str) -> Song:
 
     os.remove(img_pth)
 
+    # set music meta
     tag = MP3(path, ID3=ID3)
     tag.tags.add(
         APIC(
@@ -83,28 +66,23 @@ def download_from_youtube_link(link: str) -> Song:
             data=open(str(f"{img_pth}.png"), "rb").read(),
         )
     )
-    if albm:
-        tag.tags.add(TORY(text=s[0]["year"]))
-
-    if author or author_m:
-        if author_m:
-            for authr in author_m:
-                tag.tags.add(TOPE(text=authr))
-        else:
-            tag.tags.add(TOPE(text=author.name))
+    tag.tags.add(TORY(text=info["release"]))
+    if "genre" in info:
+        tag.tags.add(TCON(text=info["genre"]))
 
     tag.save()
     os.remove(str(f"{img_pth}.png"))
     tag = EasyID3(path)
 
-    tag["title"] = name
-    if albm:
-        tag["album"] = albm.name
+    tag["title"] = info["title"]
+    tag["album"] = info["album_name"]
+    tag["artist"] = info["artist"]
 
     tag.save()
 
+    # save track
     ms_path = Path(path)
-    song = Song(name=name, author=author, album=albm)
+    song = Song(name=info["title"], author=authors[0], album=album)
     with ms_path.open(mode="rb") as f:
         song.file = File(f, name=ms_path.name)
         song.save()
